@@ -100,7 +100,7 @@ export interface Config {
   cookie?: { name: string; value: string } | { name: string; value: string }[];
   onVisitPage?: (args: {
     page: Page;
-    pushData: (data: any, ...args: unknown[]) => Promise<void>;
+    pushData: (data: any, ...args: any[]) => Promise<void>;
   }) => Promise<void>;
   maxTokens?: number;
   outputDirectory?: string;
