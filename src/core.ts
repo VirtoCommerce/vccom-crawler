@@ -2,6 +2,7 @@
 import { Configuration, PlaywrightCrawler, downloadListOfUrls } from "crawlee";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { glob } from "glob";
+import { minimatch } from "minimatch";
 import { Config, configSchema } from "./config.js";
 import { Page } from "playwright";
 import { isWithinTokenLimit } from "gpt-tokenizer";
@@ -157,8 +158,33 @@ export async function crawl(config: Config) {
     if (isUrlASitemap) {
       const listOfUrls = await downloadListOfUrls({ url: config.url });
 
-      // Add the initial URL to the crawling queue.
-      await crawler.addRequests(listOfUrls);
+      // Apply the same match/exclude filters Crawlee uses for enqueueLinks, so
+      // sitemap seeds respect the configured include/exclude patterns. Without
+      // this, every URL in the sitemap would be crawled regardless of config.
+      const matchPatterns =
+        typeof config.match === "string" ? [config.match] : config.match;
+      const excludePatterns =
+        typeof config.exclude === "string"
+          ? [config.exclude]
+          : config.exclude ?? [];
+      // Sitemaps can list the same URL multiple times; dedupe so the log
+      // count matches what will actually be crawled (Crawlee dedupes by
+      // uniqueKey internally too, so this is purely for log accuracy).
+      const filteredUrls = [
+        ...new Set(
+          listOfUrls.filter(
+            (url) =>
+              matchPatterns.some((pattern) => minimatch(url, pattern)) &&
+              !excludePatterns.some((pattern) => minimatch(url, pattern)),
+          ),
+        ),
+      ];
+      console.log(
+        `Sitemap: ${listOfUrls.length} URLs found, ${filteredUrls.length} unique pass match/exclude filters.`,
+      );
+
+      // Add the filtered URLs to the crawling queue.
+      await crawler.addRequests(filteredUrls);
 
       // Run the crawler
       await crawler.run();
